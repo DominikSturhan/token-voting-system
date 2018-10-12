@@ -15,6 +15,8 @@ contract accessControlled {
     address public votingContract;
     
     /**
+     * Constructor function
+     * 
      * @notice Startup function to define that the contract creator is owner
      */
     function accessControlled() {
@@ -38,6 +40,8 @@ contract accessControlled {
     }
     
     /**
+     * transferOwnership function
+     * 
      * @notice Transfers ownership of ForestToken
      * @param  newOwner Adress of the new owner
      */
@@ -46,6 +50,8 @@ contract accessControlled {
     }
     
     /**
+     * changeVotingContract function
+     * 
      * @notice Changes adress of voting contract
      * @param newVotingContract Adress of new voting contract
      */
@@ -59,7 +65,7 @@ contract accessControlled {
  *  LoggedToken to record historical balances
  */
 contract ForestToken is accessControlled{
-
+    
     // Public variables of the token
     string public name;
     uint8 public decimals;
@@ -68,16 +74,15 @@ contract ForestToken is accessControlled{
     
     /**
      * @dev `Checkpoint` is the structure that attaches a block number to a
-     *  given value, the block number attached is the one that last changed the
-     *  value
+     *  given amount, the block number attached is the one that last changed the
+     *  amount
      */
-    struct  Checkpoint {
-        
+    struct Checkpoint {
         // `fromBlock` is the block number that the value was generated
         uint128 fromBlock;
         
-        // `value` is the amount of tokens at a specific block number
-        uint128 value;
+        // `amount` is the amount of tokens at a specific block number
+        uint128 amount;
     }   
 
 
@@ -92,7 +97,7 @@ contract ForestToken is accessControlled{
     // Tracks the history of the `totalSupply` of the token
     Checkpoint[] totalSupplyHistory;                                            
    
-   // This generates an public event on the blockchain that will notify clients
+   // This generates a public event on the blockchain that will notify clients
     event Transfer(address indexed _from, address indexed _to, uint256 _amount);
     event Burn(address indexed _from, uint256 _amount);
     event Approval(address indexed _owner, address indexed _spender, 
@@ -126,17 +131,18 @@ contract ForestToken is accessControlled{
         address _to, 
         uint256 _amount
     ) onlyOwner {
-        // Check for overflow 
-        require(totalSupply() + _amount >= totalSupply());
-        
+        // Get the current total supply
+        uint curTotalSupply = totalSupply;
         // Get the currect balance of the recipient
         uint previousBalanceTo = balanceOf(_to);
         
+        // Check for overflow 
+        require(curTotalSupply + _amount >= curTotalSupply);
         // Check for overflow
         require(previousBalanceTo + _amount >= previousBalanceTo);
         
         // Update the histories of the total supply and the recipient
-        updateValueAtNow(totalSupplyHistory, totalSupply() + _amount);
+        updateValueAtNow(totalSupplyHistory, curTotalSupply+ _amount);
         updateValueAtNow(balances[_to], previousBalanceTo + _amount);
         
         // Emit event
@@ -160,7 +166,7 @@ contract ForestToken is accessControlled{
     }
 
     /**
-     * transferFrom function
+     * transferFrom function - not finished, require missing
      * 
      * @notice Send `_amount` tokens to `_to` from `_from` on the condition it
      *  is approved by `_from`
@@ -198,27 +204,27 @@ contract ForestToken is accessControlled{
         }
 
         // Do not allow transfer to 0x0. Use burn() instead 
-        require((_to != 0x0)
+        require(_to != 0x0);
         // Do not allow transfer to the token contract itself
-        require(_to != address(this)));
+        require(_to != address(this));
         // Check if the sender has enough
         require(balanceOf(_from) >= _amount);
         // Check for overflow
-        require(balanceOf(_to) + _amount > balanceOfAt(_to, block.number));
+        require(balanceOf(_to) + _amount > balanceOf(_to));
         
         // Save this for an assertion in the future
-        uint previousBalance = balanceOf(_from) + balanceOf(_to)
+        uint previousBalance = balanceOf(_from) + balanceOf(_to);
         
         // Subtract from the sender
-        updateValueAtNow(balances[_from], previousBalanceFrom - _amount);
+        updateValueAtNow(balances[_from], balanceOf(_from) - _amount);
         // Add to the recipient
-        updateValueAtNow(balances[_to], previousBalanceTo + _amount);
+        updateValueAtNow(balances[_to], balanceOf(_to) + _amount);
         
         // Emit event
         Transfer(_from, _to, _amount);
         
         // Asserts are used to use static analysis to find bugs in the code
-        assert(balancesOf(_from) + balancesOf(_to) == previousBalance)
+        assert(balanceOf(_from) + balanceOf(_to) == previousBalance);
         
         return true;
     }
@@ -239,25 +245,24 @@ contract ForestToken is accessControlled{
     /**
      * balanceOfAt function
      * 
-     * @notice Queries the balance of `_owner` at a specific `_blockNumber`
+     * @notice Queries the balance of `_owner` at a specific `_block`
      * @dev The function can only be accessed by the voting contract. No one 
      *  else is allowed to view in the history
      * @param _owner The address from which the balance will be retrieved
-     * @param _blockNumber The block number when the balance is queried
-     * @return The balance at `_blockNumber`
+     * @param _block The block number when the balance is queried
+     * @return The balance at `_block`
      */
     function balanceOfAt(
         address _owner, 
-        uint _blockNumber
-    ) public constant returns (uint) onlyVotingContract {
-        return getValueAt(balances[_owner], _blockNumber);
+        uint _block
+    ) public constant onlyVotingContract returns (uint) {
+        return getValueAt(balances[_owner], _block);
     }
     
     /**
      * totalSupply function
      * 
      * @notice Total amount of tokens
-     * @param _blockNumber The block number when the totalSupply is queried
      * @return The total amount of tokens at `_blockNumber`
      */
     function totalSupply() public constant returns(uint) {
@@ -267,14 +272,14 @@ contract ForestToken is accessControlled{
     /**
      * totalSupplyAt function
      * 
-     * @notice Total amount of tokens at a specific `_blockNumber`
-     * @param _blockNumber The block number when the totalSupply is queried
-     * @return The total amount of tokens at `_blockNumber`
+     * @notice Total amount of tokens at a specific `_block`
+     * @param _block The block number when the totalSupply is queried
+     * @return The total amount of tokens at `_block`
      */
     function totalSupplyAt(
-        uint _blockNumber
-    ) public constant returns(uint) onlyVotingContract {
-        return getValueAt(totalSupplyHistory, _blockNumber);
+        uint _block
+    ) public constant onlyVotingContract returns(uint) {
+        return getValueAt(totalSupplyHistory, _block);
     }
     
     /**
@@ -296,7 +301,7 @@ contract ForestToken is accessControlled{
         if (checkpoints.length == 0) return 0;
         // Shortcut for the actual value
         if (_block >= checkpoints[checkpoints.length-1].fromBlock)
-            return checkpoints[checkpoints.length-1].value;
+            return checkpoints[checkpoints.length-1].amount;
         // Shortcut for the first value
         if (_block < checkpoints[0].fromBlock) return 0;
 
@@ -311,7 +316,7 @@ contract ForestToken is accessControlled{
                 max = mid-1;
             }
         }
-        return checkpoints[min].value;
+        return checkpoints[min].amount;
     }
 
     /**
@@ -321,25 +326,31 @@ contract ForestToken is accessControlled{
      * @dev `updateValueAtNow` used to update the `balances` map and the
      *  `totalSupplyHistory`
      * @param checkpoints The history of data being updated
-     * @param _value The new number of tokens
+     * @param _amount The new number of tokens
      */
     function updateValueAtNow(
         Checkpoint[] storage checkpoints, 
-        uint _value
+        uint _amount
     ) internal  {
         if ((checkpoints.length == 0) 
          || (checkpoints[checkpoints.length -1].fromBlock < block.number)) {
+            // New checkpoint at the end of the array
             Checkpoint storage newCheckPoint = 
              checkpoints[checkpoints.length++];
-             
+            
+            // Set the block.number of the new checkpoint 
             newCheckPoint.fromBlock =  uint128(block.number);
             
-            newCheckPoint.value = uint128(_value);
+            // Set the value of the new checkpoint
+            newCheckPoint.amount = uint128(_amount);
         } else {
+            // If there are no checkpoints or the current block.number is 
+            //  smaller than the latest entry
             Checkpoint storage oldCheckPoint = 
              checkpoints[checkpoints.length-1];
-             
-            oldCheckPoint.value = uint128(_value);
+            
+            // Update the old Checkpoint
+            oldCheckPoint.amount = uint128(_amount);
        }
     }
     
@@ -398,13 +409,13 @@ contract ForestToken is accessControlled{
      */
     function burn(
         uint256 _amount
-    ) public returns (bool success) onlyOwner {
+    ) public onlyOwner returns (bool success) {
         // Check if the balance is enough
         require(balanceOf(msg.sender) >= _amount);
         // Update the balanceOf
         updateValueAtNow(balances[msg.sender], balanceOf(msg.sender) - _amount);
         // Update the total supply
-        updateValueAtNow(balances[totalSupplyHistory], totalSupply() - _amount);
+        updateValueAtNow(totalSupplyHistory, totalSupply() - _amount);
         
         // Emit event
         Burn(msg.sender, _amount);
@@ -427,9 +438,9 @@ contract ForestToken is accessControlled{
     function burnFrom(
         address _from,
         uint256 _amount
-    ) public returns bool(success) onlyOwner {
+    ) public onlyOwner returns (bool success) {
         // Check if the owner is allowed
-        require(allowed[_from, msg.sender] >= _amount);
+        require(allowed[msg.sender][_from] >= _amount);
         // Check if the balance is enough
         require(balanceOf(_from) >= _amount);
         // Update the balanceOf
@@ -437,7 +448,7 @@ contract ForestToken is accessControlled{
         // Update the total supply
         updateValueAtNow(balances[totalSupplyHistory], totalSupply() - _amount);
         // Update the amount of token allowed to Burn
-        allowed[msg.sender, _from] -= _amount;
+        allowed[msg.sender][_from] -= _amount;
         
         // Emit event
         Burn(_from , _amount);
