@@ -33,27 +33,12 @@ contract controlled {
     /**
      * @notice Modifier is needed to control access
      */
-    modifier onlyOwner {
-        require(msg.sender == owner);
+    modifier onlyController {
+        require(msg.sender == owner || msg.sender == token 
+         || msg.sender == voting);
         _;
     }
-    
-    /**
-     * @notice Modifier is needed to control access
-     */
-    modifier onlyToken {
-        require(msg.sender == token);
-        _;
-    }
-    
-    /**
-     * @notice Modifier is needed to control access
-     */
-    modifier onlyVoting {
-        require(msg.sender == voting);
-        _;
-    }
-    
+
     /**
      * transferOwnership function
      * 
@@ -62,7 +47,7 @@ contract controlled {
      */
     function transferOwnership(
         address newOwner
-    ) external onlyOwner {
+    ) external onlyController {
         owner = newOwner;
     }
     
@@ -74,7 +59,7 @@ contract controlled {
      */
     function changeToken(
         address newToken
-    ) external onlyOwner {
+    ) external onlyController {
         token = newToken;
     }
     
@@ -86,7 +71,7 @@ contract controlled {
      */
     function changeVoting(
         address newVoting
-    ) external onlyOwner {
+    ) external onlyController {
         voting = newVoting;
     }
 }
@@ -105,37 +90,101 @@ contract TokenHistory is controlled {
         // `amount` is the amount of tokens at a specific block number
         uint128 amount;
     }   
-
-
-    // `balances` is the map that tracks the balance of each address, in this
-    //   contract when the balance changes the block number that the change
-    //   occurred is also included in the map
+    
+    // Tracks the history of the `totalSupply` of the token
+    Checkpoint[] totalSupplyHistory;
+    
+    // `balances` is the map that tracks the balance of each address
     mapping (address => Checkpoint[]) balances;
+
+    /// External functions ///    
+    
+    /**
+     * getBalanceAt function
+     * 
+     * @notice `getBalanceAt` retrieves the number of tokens at a 
+     *  given block number
+     * @dev It is the external function, only accessable 
+     *  from the voting contract
+     * @param _owner Address whose history of balances being queried
+     * @param _block The block number to retrieve the amount at
+     * @return The number of tokens being queried
+     */
+    function getBalanceAt(
+        address _owner,
+        uint _block
+    ) constant external onlyController returns (uint) {
+        return _getBalanceAt(balances[_owner], _block);
+    }
+    
+    /**
+     * getTotalSupplyAt function
+     * 
+     * @notice `getTotalSupplyAt` retrieves the number of tokens at a 
+     *  given block number
+     * @dev It is the external function, only accessable 
+     *  from the voting contract
+     * @param _block The block number to retrieve the amount at
+     * @return The number of tokens being queried
+     */
+    function getTotalSupplyAt(
+        uint _block
+    ) constant external onlyController returns (uint) {
+        return _getBalanceAt(totalSupplyHistory, _block);
+    }
+    
+    /**
+     * updateBalanceAtNow function
+     * 
+     * @notice This function creates a new entry in the history
+     * @dev It is the external function, only accessable 
+     *  from the voting contract
+     * @param _owner Address whose history of data being updated
+     * @param _amount The new number of tokens
+     */
+    function updateBalanceAtNow(
+        address _owner,
+        uint _amount
+    ) external onlyController returns (bool success) {
+        return _updateBalanceAtNow(balances[_owner], _amount);
+    }
+    
+    /**
+     * updateTotalSupplyAtNow function
+     * 
+     * @notice This function creates a new entry in the history
+     * @dev It is the external function, only accessable 
+     *  from the voting contract
+     * @param _amount The new number of tokens
+     */
+    function updateTotalSupplyAtNow(
+        uint _amount
+    ) external onlyController returns (bool success) {
+        return _updateBalanceAtNow(totalSupplyHistory, _amount);
+    }
+    
+    /// Internal functions ///
     
      /**
-     * GetBalanceAt function
+     * _getBalanceAt function
      * 
      * @notice `getBalanceAt` retrieves the number of tokens at a 
      *  given block number
      * @dev It is an internal function, the query function use it to get the
      *  the number of tokens
-     * @param _owner Address of the person whose history of values being queried
+     * @param checkpoints The history of balances being queried
      * @param _block The block number to retrieve the value at
      * @return The number of tokens being queried
      */
-    function getBalanceAt(
-        address _owner, 
+    function _getBalanceAt(
+        Checkpoint[] storage checkpoints, 
         uint _block
-    ) external constant onlyVoting returns (uint) {
-        Checkpoint[] storage checkpoints = balances[_owner];
-        
+    ) constant internal returns (uint) {
         // Shortcut, if there is no balance
         if (checkpoints.length == 0) return 0;
-        
         // Shortcut for the actual value
         if (_block >= checkpoints[checkpoints.length-1].fromBlock)
             return checkpoints[checkpoints.length-1].amount;
-            
         // Shortcut for the first value
         if (_block < checkpoints[0].fromBlock) return 0;
 
@@ -154,20 +203,18 @@ contract TokenHistory is controlled {
     }
 
     /**
-     * updateBalanceAtNow function
+     * _updateBalanceAtNow function
      * 
      * @notice This function creates a new entry in the history
      * @dev `updateBalanceAtNow` used to update the `balances` map and the
      *  `totalSupplyHistory`
-     * @param _owner Address of the person whose history of values being updated
+     * @param checkpoints The history of data being updated
      * @param _amount The new number of tokens
      */
-    function updateBalanceAtNow(
-        address _owner, 
+    function _updateBalanceAtNow(
+        Checkpoint[] storage checkpoints, 
         uint _amount
-    ) external onlyToken {
-        Checkpoint[] storage checkpoints = balances[_owner];
-        
+    ) internal  returns (bool success) {
         if ((checkpoints.length == 0) 
          || (checkpoints[checkpoints.length -1].fromBlock < block.number)) {
             // New checkpoint at the end of the array
@@ -188,5 +235,7 @@ contract TokenHistory is controlled {
             // Update the old Checkpoint
             oldCheckPoint.amount = uint128(_amount);
        }
+       
+       return true;
     }
 }
