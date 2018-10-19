@@ -40,7 +40,7 @@ contract VotingMechanism is controlled {
 
     event ProposalAdded(uint proposalID, address recipient, uint amount, string description);
     event Voted(uint proposalID, address voter);
-    event ProposalTallied(uint proposalID, uint result, uint quorum, bool active);
+    event ProposalTallied(uint proposalID, uint yes, uint nay, uint quorum, bool active);
     event ChangeOfRules(uint newMinimumQuorum, uint newDebatingPeriodInMinutes, int newMajorityMargin);
 
     struct Proposal {
@@ -193,7 +193,7 @@ contract VotingMechanism is controlled {
      * Vote `supportsProposal? in support of : against` proposal #`proposalNumber`
      *
      * @param proposalNumber number of proposal
-     * @param supportsProposal either in favor or against it
+     * @param _secretVote either in favor or against it
      */
     function vote(
         uint proposalNumber,
@@ -209,32 +209,53 @@ contract VotingMechanism is controlled {
         p.votes[msg.sender] = Vote({secretVote: _secretVote, voter: msg.sender, weight: balance});
         p.voted[msg.sender] = true;
         p.numberOfVotes++;
-        Voted(proposalNumber, msg.sender);
+        emit Voted(proposalNumber, msg.sender);
         return true;
     }
     
     function revealVote(
         uint proposalNumber,
         string salt,
-        string vote
+        string plain
     ) public returns (bool success)
     {
         Proposal storage p = proposals[proposalNumber];
-        string memory hash = string(keccak256(salt, vote));
+        string memory hash = bytes32ToString(keccak256(salt, plain));
         
         require(p.voted[msg.sender] = true);
-        require(keccak256(p.votes[msg.sender].secretVote) = keccak256(hash));
+        require(compareStrings(p.votes[msg.sender].secretVote, bytes32ToString(keccak256(salt, plain))));
         
-        if(keccak256(vote) == keccak256("yea")) {
+        if(compareStrings(plain, "yea")) {
             p.tally.yea += p.votes[msg.sender].weight;
-        } else if(keccak256(vote) == keccak256("nay")) {
+        } else if(compareStrings(plain, "nay")) {
             p.tally.nay += p.votes[msg.sender].weight;   
+        } else {
+            return false;
         }
         
         return true;
     }
+    
+    function compareStrings (string a, string b) view returns (bool){
+       return keccak256(a) == keccak256(b);
+   }
 
-
+    function bytes32ToString(bytes32 x) view returns (string) {
+    bytes memory bytesString = new bytes(32);
+    uint charCount = 0;
+    for (uint j = 0; j < 32; j++) {
+        byte char = byte(bytes32(uint(x) * 2 ** (8 * j)));
+        if (char != 0) {
+            bytesString[charCount] = char;
+            charCount++;
+        }
+    }
+    bytes memory bytesStringTrimmed = new bytes(charCount);
+    for (j = 0; j < charCount; j++) {
+        bytesStringTrimmed[j] = bytesString[j];
+    }
+    return string(bytesStringTrimmed);
+    }
 
     /**
      * Finish vote
@@ -254,7 +275,7 @@ contract VotingMechanism is controlled {
 
         // ...then execute result
 
-        if (p.currentResult > majorityMargin) {
+        if (p.tally.yea > p.tally.nay) {
             // Proposal passed; execute the transaction
 
             p.executed = true; // Avoid recursive calling
@@ -267,6 +288,6 @@ contract VotingMechanism is controlled {
         }
 
         // Fire Events
-        emit ProposalTallied(proposalNumber, p.currentResult, p.numberOfVotes, p.proposalPassed);
+        emit ProposalTallied(proposalNumber, p.tally.yea, p.tally.nay, p.numberOfVotes, p.proposalPassed);
     }
 }
