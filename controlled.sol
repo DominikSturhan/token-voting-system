@@ -6,7 +6,6 @@ contract controlled {
     address public owner;
     address public token;
     address public voting;
-    address public history;
     
     /**
      * Constructor function
@@ -22,10 +21,10 @@ contract controlled {
      */
     modifier onlyController {
         require(msg.sender == owner || msg.sender == token 
-         || msg.sender == voting || msg.sender == history);
+         || msg.sender == voting);
         _;
     }
-
+    
     /**
      * transferOwnership function
      * 
@@ -48,18 +47,6 @@ contract controlled {
         address newToken
     ) external onlyController {
         token = newToken;
-    }
-    
-    /**
-     * changeHistory function
-     * 
-     * @notice Changes the address of token history contract
-     * @param newHistory Adress of new token history contract
-     */
-    function changeHistory(
-        address newHistory
-    ) external onlyController {
-        history = newHistory;
     }
     
     /**
