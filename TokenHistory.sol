@@ -1,12 +1,11 @@
 pragma solidity ^0.4.25;
-import './controlled.sol';
 
 /**
  * @title This contract stores the history of a token
  * @author Dominik Sturhan
  */
 
-contract savingHistory is controlled {
+contract TokenHistory {
     
     /**
      * @dev `Checkpoint` is the structure that attaches a block number to a
@@ -50,7 +49,7 @@ contract savingHistory is controlled {
     function getBalanceAt(
         address addr, 
         uint _block
-    ) external view onlyController returns (uint amount) {
+    ) external view returns (uint amount) {
          return _getBalanceAt(balances[addr], _block);
     }
 
@@ -63,7 +62,7 @@ contract savingHistory is controlled {
      */
     function getTotalSupplyAt(
         uint _block
-    ) external view onlyController returns (uint amount) {
+    ) external view returns (uint amount) {
          return _getBalanceAt(totalSupplyHistory, _block);
     }
     
