@@ -1,13 +1,14 @@
 pragma solidity ^0.4.25;
-import './controlled.sol';
 
-contract VotingStorage is controlled {
+contract VotingStorage {
     
     struct Vote {
         uint proposalID;
         address voter;
         bytes32 secret;
         uint weight;
+        uint endVotingPhase;
+        uint endRevealingPhase;
     }
     
     struct ListElement{
@@ -69,13 +70,23 @@ contract VotingStorage is controlled {
     function getEntry(
         address _voter,
         uint _proposalID
-    ) external view returns (uint proposalID, address voter, bytes32 secret, uint weight) {
+    ) external view returns (uint proposalID, address voter, bytes32 secret, uint weight, uint endVotingPhase, uint endRevealingPhase) {
         LinkedList storage list = lists[_voter]; 
         
         bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
         Vote memory vote = list.listElements[id].vote;
         
-        return (vote.proposalID, vote.voter, vote.secret, vote.weight);
+        return (vote.proposalID, vote.voter, vote.secret, vote.weight, vote.endVotingPhase, vote.endRevealingPhase);
+    }
+    
+    function getVote(
+        address _voter,
+        uint _proposalID
+    ) internal view returns (Vote) {
+        LinkedList storage list = lists[_voter]; 
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        return list.listElements[id].vote;
     }
     
     /**
@@ -85,23 +96,15 @@ contract VotingStorage is controlled {
      *  matches the secret
      * @param _voter Address of the voter
      * @param _proposalID ID of the proposal    
-     * @param _salt Salt for the encryption
-     * @param _vote Decrypted vote
      * @return True if successful
      */
     function removeEntry(
         address _voter,
-        uint _proposalID,
-        string _salt,
-        string _vote
+        uint _proposalID
     ) internal returns (bool) {
         LinkedList storage list = lists[_voter];
         
         bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
-        Vote memory vote = list.listElements[id].vote;
-        
-        require(keccak256(abi.encodePacked(_salt, _vote)) == vote.secret);
-        
         bytes32 next = list.listElements[id].next;
         bytes32 prev = list.listElements[id].prev;
         
@@ -113,6 +116,21 @@ contract VotingStorage is controlled {
         
         return true;
     }
+    
+    function checkEncryption(
+        address _voter,
+        uint _proposalID,
+        string _salt,
+        string _vote
+    ) internal view returns (bool) {
+        LinkedList storage list = lists[_voter];
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        Vote memory vote = list.listElements[id].vote;
+        
+        return keccak256(abi.encodePacked(_salt, _vote)) == vote.secret;
+    }
+        
 
     /**
      * getOpenIDs function
