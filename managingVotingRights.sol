@@ -1,13 +1,20 @@
 pragma solidity ^0.4.25;
+import './controlled.sol';
 
-contract managingVotingRights {
+contract VotingStorage is controlled {
+    
+    struct Vote {
+        uint proposalID;
+        address voter;
+        bytes32 secret;
+        uint weight;
+    }
     
     struct ListElement{
         bytes32 prev;
         bytes32 next;
         
-        uint proposalID;
-        bytes32 secret;
+        Vote vote;
     }
     
     struct LinkedList{
@@ -19,21 +26,27 @@ contract managingVotingRights {
 
     mapping (address => LinkedList) internal lists;
 
+    /**
+     * addEntry function
+     * 
+     * @notice this function adds a new vote to the end the list
+     * @param _vote Vote with all information
+     * @return true if successful
+     */
     function addEntry(
-        uint _id, 
-        bytes32 _secret
-    ) public {
-        LinkedList storage list = lists[msg.sender];
+        Vote _vote
+    ) internal returns (bool) {
+        LinkedList storage list = lists[_vote.voter];
         
-        bytes32 id = keccak256(abi.encodePacked(msg.sender, _id));
+        bytes32 id = keccak256(abi.encodePacked(_vote.voter, _vote.proposalID));
         
         if(list.length == 0) {
-            list.listElements[id] = ListElement(list.head, list.head, _id, _secret);
+            list.listElements[id] = ListElement(list.head, list.head, _vote);
             
             list.listElements[list.head].next = id;
             list.listElements[list.head].prev = id;
         } else {
-            list.listElements[id] = ListElement(list.tail, list.head, _id, _secret);
+            list.listElements[id] = ListElement(list.tail, list.head, _vote);
             
             list.listElements[list.tail].next = id;
             list.listElements[list.head].prev = id;
@@ -41,26 +54,54 @@ contract managingVotingRights {
         
         list.tail = id;
         list.length++;
+        
+        return true;
     }
     
+    /**
+     * getEntry function
+     * 
+     * @notice The voter can query his casted vote for a proposal
+     * @param _voter Address of the voter
+     * @param _proposalID ID of the proposal
+     * @return All information about the casted vote
+     */
     function getEntry(
-        uint _id
-    ) public view returns (uint prevID, uint nextID, uint proposalID, bytes32 secret) {
-        LinkedList storage list = lists[msg.sender]; 
+        address _voter,
+        uint _proposalID
+    ) external view returns (uint proposalID, address voter, bytes32 secret, uint weight) {
+        LinkedList storage list = lists[_voter]; 
         
-        bytes32 id = keccak256(abi.encodePacked(msg.sender, _id));
-        bytes32 next = list.listElements[id].next;
-        bytes32 prev = list.listElements[id].prev;
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        Vote memory vote = list.listElements[id].vote;
         
-        return (list.listElements[prev].proposalID, list.listElements[next].proposalID, list.listElements[id].proposalID, list.listElements[id].secret);
+        return (vote.proposalID, vote.voter, vote.secret, vote.weight);
     }
     
+    /**
+     * removeEntry function
+     * 
+     * @notice The function removes an entry if the hash of _salt and _vote 
+     *  matches the secret
+     * @param _voter Address of the voter
+     * @param _proposalID ID of the proposal    
+     * @param _salt Salt for the encryption
+     * @param _vote Decrypted vote
+     * @return True if successful
+     */
     function removeEntry(
-        uint _id
-    ) public {
-        LinkedList storage list = lists[msg.sender];
+        address _voter,
+        uint _proposalID,
+        string _salt,
+        string _vote
+    ) internal returns (bool) {
+        LinkedList storage list = lists[_voter];
         
-        bytes32 id = keccak256(abi.encodePacked(msg.sender, _id));
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        Vote memory vote = list.listElements[id].vote;
+        
+        require(keccak256(abi.encodePacked(_salt, _vote)) == vote.secret);
+        
         bytes32 next = list.listElements[id].next;
         bytes32 prev = list.listElements[id].prev;
         
@@ -69,6 +110,8 @@ contract managingVotingRights {
         
         delete list.listElements[id];
         list.length--;
+        
+        return true;
     }
 
     /**
@@ -87,7 +130,9 @@ contract managingVotingRights {
         uint pointer = 1;
         while(pointer <= length){
             bytes32 next = list.listElements[element].next;
-            ids = appendUintToString(ids, " ", list.listElements[next].proposalID);
+            Vote memory vote = list.listElements[next].vote;
+            
+            ids = appendUintToString(ids, " ", vote.proposalID);
             
             element = next;
             pointer++;
@@ -145,20 +190,4 @@ contract managingVotingRights {
         
         return string(s);
     }
-    
-    /**
-     * encrypt function
-     * 
-     * @notice function is used to get hash of two string
-     * @param _a First string
-     * @param _b Second string
-     * @return returns the the encryption as bytes32
-     */
-    function encrypt(
-        string _a, 
-        string _b
-    ) external pure returns (bytes32){
-        return keccak256(abi.encodePacked(_a, _b));
-    }
-
 }
