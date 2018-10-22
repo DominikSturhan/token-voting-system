@@ -1,8 +1,9 @@
 pragma solidity ^0.4.25;
-import './savingHistory.sol';
+import './TokenHistory.sol';
+import './Controller.sol';
 
 
-contract ForestToken is savingHistory {
+contract ForestToken is TokenHistory, Controller {
     
     // Public variables
     string public tokenName;
@@ -75,7 +76,7 @@ contract ForestToken is savingHistory {
     function mintToken(
         address _target, 
         uint256 _mintedAmount
-    ) public onlyController returns (bool success) {
+    ) public onlyOwner returns (bool success) {
         Checkpoint[] storage checkpointsTo = balances[_target];
         
         uint balancesTarget = _getBalanceAt(checkpointsTo, block.number);
@@ -99,7 +100,7 @@ contract ForestToken is savingHistory {
     function burn(
         address _target, 
         uint256 _burnedAmount
-    ) public onlyController returns (bool success) {
+    ) public onlyOwner returns (bool success) {
         Checkpoint[] storage checkpointsTo = balances[_target];
         
         uint balancesTarget = _getBalanceAt(checkpointsTo, block.number);
