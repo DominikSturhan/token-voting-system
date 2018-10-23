@@ -26,7 +26,10 @@ contract ProposalStorage {
         uint endRevealingPhase;
         
         // Internal helper
-        uint numberOfVotes;
+        uint numberOfSecretVotes;
+        uint numberOfRevealedVotes;
+        uint numberOfTokens;
+        uint minQuorum;
         bool executed;
         bool proposalPassed;
         mapping (address => bool) voted;
