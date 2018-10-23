@@ -13,7 +13,7 @@ interface ForestToken {
     ) view external returns (uint);
     
     function getTotalSupply(
-    ) external view returns (uint totalSupply);
+    ) external view returns (uint);
     
     function getTotalSupplyAt(
         uint _block
@@ -140,7 +140,7 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         proposal.numberOfSecretVotes = 0;
         proposal.numberOfRevealedVotes = 0;
         proposal.numberOfTokens = 0;
-        //proposal.minQuorum = uint((1/minimumQuorum) * token.getTotalSupply);
+        proposal.minQuorum = (1/minimumQuorum) * token.getTotalSupply();
         proposal.executed = false;
         proposal.proposalPassed = false;
         proposal.yea = 0;
