@@ -12,9 +12,9 @@ contract Controller {
     /// Variables ///
     
     /**
-     * @notice Everyone is able to see the address of the owner
-     *  address public owner
-     * @dev The owner could be a person who carries out orders on 
+     * @notice Everyone is able to see the address of the 'owner'
+     * 
+     * @dev The 'owner' could be a person who carries out orders on 
      *  behalf of the shareholders
      */
     address public owner;
@@ -24,7 +24,7 @@ contract Controller {
     /**
      * Constructor function
      * 
-     * @notice Startup function to define that the contract creator is owner
+     * @notice Startup function to define that the contract creator is 'owner'
      */
     constructor() public {
         owner = msg.sender;
@@ -34,7 +34,7 @@ contract Controller {
      * transferOwnership function
      * 
      * @notice Transfers ownership of the contract
-     * @param  _newOwner Adress of the new owner
+     * @param  _newOwner Address of the new owner
      */
     function transferOwnership(
         address _newOwner
