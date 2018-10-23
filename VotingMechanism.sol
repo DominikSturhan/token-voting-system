@@ -12,6 +12,9 @@ interface ForestToken {
         uint _block
     ) view external returns (uint);
     
+    function getTotalSupply(
+    ) external view returns (uint totalSupply);
+    
     function getTotalSupplyAt(
         uint _block
     ) view external returns (uint);
@@ -134,7 +137,10 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         proposal.startRevealingPhase = now + durationPhaseInMinutes * 1 minutes;
         proposal.endRevealingPhase = now + durationPhaseInMinutes * 2 minutes;
         
-        proposal.numberOfVotes = 0;
+        proposal.numberOfSecretVotes = 0;
+        proposal.numberOfRevealedVotes = 0;
+        proposal.numberOfTokens = 0;
+        //proposal.minQuorum = uint((1/minimumQuorum) * token.getTotalSupply);
         proposal.executed = false;
         proposal.proposalPassed = false;
         proposal.yea = 0;
@@ -178,9 +184,10 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         vote.endVotingPhase = proposal.endVotingPhase;
         vote.endRevealingPhase = proposal.endRevealingPhase;
         
-        proposal.voted[msg.sender] = true;
-        
         addEntry(vote);
+        
+        proposal.voted[msg.sender] = true;
+        proposal.numberOfSecretVotes++;
         
         // Fire event
         emit Voted(_proposalID, msg.sender);
@@ -220,7 +227,8 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
             return false;
         }
         
-        proposal.numberOfVotes += vote.weight;
+        proposal.numberOfTokens += vote.weight;
+        proposal.numberOfRevealedVotes++;
         
         removeEntry(msg.sender, _proposalID);
         // Fire event
@@ -245,7 +253,7 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         // Proposal should not already be executed
         require(!proposal.executed); 
         // The quorum must be reached
-        require(proposal.numberOfVotes >= minimumQuorum);                       
+        require(proposal.numberOfTokens >= proposal.minQuorum);                       
 
         if (proposal.yea > proposal.nay) {
             // Proposal passed
