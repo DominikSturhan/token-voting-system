@@ -9,6 +9,8 @@ pragma solidity ^0.4.25;
  */
 contract Controller {
     
+    /// Variables ///
+    
     /**
      * @notice Everyone is able to see the address of the owner
      *  address public owner
@@ -16,7 +18,9 @@ contract Controller {
      *  behalf of the shareholders
      */
     address public owner;
-
+    
+    /// Functions ///
+    
     /**
      * Constructor function
      * 
@@ -27,14 +31,6 @@ contract Controller {
     }
     
     /**
-     * @notice Modifier is needed to control access
-     */
-    modifier onlyOwner {
-        require(msg.sender == owner);
-        _;
-    }
-    
-    /**
      * transferOwnership function
      * 
      * @notice Transfers ownership of the contract
@@ -42,7 +38,17 @@ contract Controller {
      */
     function transferOwnership(
         address _newOwner
-    ) external onlyOwner {
+    ) public onlyOwner {
         owner = _newOwner;
+    }
+    
+    /// Modifier ///
+    
+    /**
+     * @notice Modifier is needed to control access
+     */
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
     }
 }
