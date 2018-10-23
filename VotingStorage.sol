@@ -1,7 +1,18 @@
 pragma solidity ^0.4.25;
 
+/**
+ * @title Voting Storage
+ * @author Dominik Sturhan
+ * 
+ * @notice This contract stores all votes cast. Once a vote is revealed, it 
+ *  will be deleted from the storage.
+ */
 contract VotingStorage {
     
+    /**
+     * @dev The 'Vote' describes the structure in which all information about 
+     *  the vote will be stored
+     */
     struct Vote {
         uint proposalID;
         address voter;
@@ -11,6 +22,10 @@ contract VotingStorage {
         uint endRevealingPhase;
     }
     
+    /**
+     * @dev The 'ListElement' stores a 'vote'. It also knows the 'previous' and 
+     *  'next' element
+     */
     struct ListElement{
         bytes32 prev;
         bytes32 next;
@@ -18,25 +33,82 @@ contract VotingStorage {
         Vote vote;
     }
     
+    
+    /**
+     * @dev The 'Vote' will be stored in a circular double linked list. Every 
+     *  list knows it's head and tail.
+     */
     struct LinkedList{
         uint length;
         bytes32 head;
         bytes32 tail;
         mapping (bytes32 => ListElement) listElements;
     }
-
+    
+    /**
+     * @dev Every voter has his own list. All of them are stored in the 
+     *  map 'lists'.
+     */
     mapping (address => LinkedList) internal lists;
 
+    /// External functions ///
+
+    /**
+     * getVote function
+     * 
+     * @notice The voter can query his casted vote for a proposal
+     * 
+     * @param _proposalID ID of the proposal
+     * @return All information about the casted vote
+     */
+    function getVote(
+        uint _proposalID
+    ) external view returns (bytes32 Secret, uint Weight, uint EndOfVotingPhase, uint EndOfRevealingPhase) {
+        Vote memory vote = _getVote(msg.sender, _proposalID);
+        return (vote.secret, vote.weight, vote.endVotingPhase, vote.endRevealingPhase);
+    }
+    
+    /**
+     * getOpenIDs function
+     * 
+     * @notice Query all unreaveled votes of the sender
+     * 
+     * @return A string like "There are unreaveled votes for the following 
+     *  proposals: ..."
+     */
+    function getOpenIDs() external view returns (string){
+        LinkedList storage list = lists[msg.sender];
+        bytes32 element = list.head;
+        
+        string memory ids = "There are unreaveled votes for the following proposals:";
+        
+        // Loop that analyzes the 'list'
+        uint length = list.length;
+        uint pointer = 1;
+        while(pointer <= length){
+            bytes32 next = list.listElements[element].next;
+            Vote memory vote = list.listElements[next].vote;
+            
+            ids = appendUintToString(ids, " ", vote.proposalID);
+            
+            element = next;
+            pointer++;
+        }
+        return ids;
+    }
+    
+    /// Internal functions ///
+    
     /**
      * addEntry function
      * 
-     * @notice this function adds a new vote to the end the list
-     * @param _vote Vote with all information
-     * @return true if successful
+     * @notice Add a new vote to end of the list
+     * 
+     * @param _vote Structure with all information about the casted vote
      */
     function addEntry(
         Vote _vote
-    ) internal returns (bool) {
+    ) internal {
         LinkedList storage list = lists[_vote.voter];
         
         bytes32 id = keccak256(abi.encodePacked(_vote.voter, _vote.proposalID));
@@ -55,53 +127,20 @@ contract VotingStorage {
         
         list.tail = id;
         list.length++;
-        
-        return true;
-    }
-    
-    /**
-     * getEntry function
-     * 
-     * @notice The voter can query his casted vote for a proposal
-     * @param _voter Address of the voter
-     * @param _proposalID ID of the proposal
-     * @return All information about the casted vote
-     */
-    function getEntry(
-        address _voter,
-        uint _proposalID
-    ) external view returns (uint proposalID, address voter, bytes32 secret, uint weight, uint endVotingPhase, uint endRevealingPhase) {
-        LinkedList storage list = lists[_voter]; 
-        
-        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
-        Vote memory vote = list.listElements[id].vote;
-        
-        return (vote.proposalID, vote.voter, vote.secret, vote.weight, vote.endVotingPhase, vote.endRevealingPhase);
-    }
-    
-    function getVote(
-        address _voter,
-        uint _proposalID
-    ) internal view returns (Vote) {
-        LinkedList storage list = lists[_voter]; 
-        
-        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
-        return list.listElements[id].vote;
     }
     
     /**
      * removeEntry function
      * 
-     * @notice The function removes an entry if the hash of _salt and _vote 
-     *  matches the secret
+     * @notice Remove a vote of the list
+     * 
      * @param _voter Address of the voter
-     * @param _proposalID ID of the proposal    
-     * @return True if successful
+     * @param _proposalID ID of the proposal
      */
     function removeEntry(
         address _voter,
         uint _proposalID
-    ) internal returns (bool) {
+    ) internal {
         LinkedList storage list = lists[_voter];
         
         bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
@@ -113,9 +152,27 @@ contract VotingStorage {
         
         delete list.listElements[id];
         list.length--;
-        
-        return true;
     }
+    
+    /**
+     * _getVote function
+     * 
+     * @notice Query a casted vote 
+     * 
+     * @param _voter Address of the voter
+     * @param _proposalID The ID of the proposal
+     * @return The casted vote
+     */
+    function _getVote(
+        address _voter,
+        uint _proposalID
+    ) internal view returns (Vote) {
+        LinkedList storage list = lists[_voter]; 
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        return list.listElements[id].vote;
+    }
+    
     
     function checkEncryption(
         address _voter,
@@ -130,32 +187,32 @@ contract VotingStorage {
         
         return keccak256(abi.encodePacked(_salt, _vote)) == vote.secret;
     }
-        
-
-    /**
-     * getOpenIDs function
-     * 
-     * @notice function displays the user which IDs are still open
-     * @return a string like "IDs: ..."
-     */
-    function getOpenIDs() external view returns (string ids){
-        LinkedList storage list = lists[msg.sender];
+    
+    function isAllowedToVote(
+        address _voter
+    ) internal view returns (bool){
+        LinkedList storage list = lists[_voter];
         bytes32 element = list.head;
         
-        ids = "IDs:";
+        // If there is no entry, the voter is allowed to vote
+        if (list.length == 0) return true;
         
+        // If there are entries and the end of their voting phase is in the 
+        //  past, the voter is not allowed to vote
         uint length = list.length;
         uint pointer = 1;
         while(pointer <= length){
             bytes32 next = list.listElements[element].next;
             Vote memory vote = list.listElements[next].vote;
             
-            ids = appendUintToString(ids, " ", vote.proposalID);
+            if (now > vote.endVotingPhase) return false;
             
             element = next;
             pointer++;
         }
-        return ids;
+        
+        // Else return true, the voter is allowed to vote 
+        return true;
     }
     
     /**
