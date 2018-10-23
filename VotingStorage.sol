@@ -63,9 +63,13 @@ contract VotingStorage {
      */
     function getVote(
         uint _proposalID
-    ) external view returns (bytes32 Secret, uint Weight, uint EndOfVotingPhase, uint EndOfRevealingPhase) {
+    ) external view returns (bytes32 Secret, uint Weight, 
+        uint EndOfVotingPhase, uint EndOfRevealingPhase) {
+            
         Vote memory vote = _getVote(msg.sender, _proposalID);
-        return (vote.secret, vote.weight, vote.endVotingPhase, vote.endRevealingPhase);
+        
+        return (vote.secret, vote.weight, vote.endVotingPhase, 
+            vote.endRevealingPhase);
     }
     
     /**
@@ -173,21 +177,39 @@ contract VotingStorage {
         return list.listElements[id].vote;
     }
     
-    
+    /**
+     * checkEncryption function
+     * 
+     * @notice Check if the entered data matches the secret.
+     * 
+     * @param _voter Address of the voter
+     * @param _proposalID The ID of the proposal
+     * @param _salt Salt value to generate the hash 
+     * @param _plain The decrypted vote
+     * @return True if the hash of the entered data matches the secret
+     */
     function checkEncryption(
         address _voter,
         uint _proposalID,
         string _salt,
-        string _vote
+        string _plain
     ) internal view returns (bool) {
         LinkedList storage list = lists[_voter];
         
         bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
         Vote memory vote = list.listElements[id].vote;
         
-        return keccak256(abi.encodePacked(_salt, _vote)) == vote.secret;
+        return keccak256(abi.encodePacked(_salt, _plain)) == vote.secret;
     }
     
+    /**
+     * isAllowedToVote function
+     * 
+     * @notice Checks if the voter's right to vote is blocked
+     * 
+     * @param _voter Address of the voter
+     * @return True if the voter is allowed to voter
+     */
     function isAllowedToVote(
         address _voter
     ) internal view returns (bool){
@@ -218,7 +240,8 @@ contract VotingStorage {
     /**
      * appendUintToString function
      * 
-     * @notice function is an internal helper for getOpenIDs
+     * @notice Internal helper for getOpenIDs
+     * 
      * @param _str Current string
      * @param _space Space string
      * @param _int Uint to be appended
