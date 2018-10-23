@@ -39,6 +39,10 @@ contract ProposalStorage {
     // Counter for the ID
     uint internal currentID;
     
+    // This generates a public event on the blockchain that will notify clients
+    event ProposalAdded(uint proposalID, string description, uint weightingDate, 
+        uint endVotingPhase, uint endRevealingPhase);
+    
     /// External functions ///
     
     /**
@@ -91,6 +95,10 @@ contract ProposalStorage {
         proposals[proposalID] = _proposal;
         currentID++;
         
+        // Fire event
+        emit ProposalAdded(proposalID, _proposal.description, 
+            _proposal.weightingDate, _proposal.endVotingPhase, 
+            _proposal.endRevealingPhase);
         return proposalID;
     }
 }
