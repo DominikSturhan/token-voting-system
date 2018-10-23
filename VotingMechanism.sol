@@ -3,6 +3,9 @@ import './Controller.sol';
 import './VotingStorage.sol';
 import './ProposalStorage.sol';
 
+/**
+ * @notice Interface is needed to query the historical balances
+ */
 interface ForestToken {
     function getBalanceAt(
         address _owner,
@@ -14,9 +17,25 @@ interface ForestToken {
     ) view external returns (uint);
 }
 
+/**
+ * @title Voting Mechanism
+ * @author Dominik Sturhan
+ * 
+ * @notice This contract is the voting mechanism. 
+ * 
+ * @dev It inherits from the contracts Controller, ProposalStorage and 
+ *  VotingStorage. If ProposalStorage and VotingStorage were stand-alone 
+ *  contracts, it would result in unnecessary transactions between them.
+ */
 contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
     
-    // Voting Rules
+    /**
+     * These variables represent the voting rules. 
+     * 'minimumQuorum' has a value between 1 and 100. It describes the required 
+     *  percentage of the total supply, that a proposal may be executed at all
+     * 'durationPhaseInMinutes' describes the duration of the voting and 
+     *  revealing phase in minutes
+     */
     uint public minimumQuorum;
     uint public durationPhaseInMinutes;
     
@@ -32,11 +51,12 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
     }
 
     // This generates public events on the blockchain that will notify clients
-    // event ProposalAdded(uint proposalID, address recipient, uint amount, string description);
-    // event Voted(uint proposalID, address voter);
-    // event ProposalTallied(uint proposalID, uint yes, uint nay, uint quorum, bool active);
-    // event ChangeOfRules(uint newMinimumQuorum, uint newDebatingPeriodInMinutes, int newMajorityMargin);
-
+    event ChangeOfRules(uint newMinimumQuorum, uint newDurationPhaseInMinutes);
+    event Voted(uint proposalID, address voter);
+    event Revealed(uint proposalID, address voter);
+    event ProposalTallied(uint proposalID, bool proposalPassed, 
+        uint YEA, uint NAY);
+   
     /**
      * Constructor function
      */
@@ -47,15 +67,18 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
     )  payable public {
         changeVotingRules(_minimumQuorum, _durationPhaseInMinutes);
         changeToken(_token);
+        
+        currentID = 1;
     }
     
-    /// External or public function ///
+    /// Public function ///
     
     /**
      * changeToken function
      * 
      * @notice Changes the address of token contract
-     * @param newToken Adress of new token contract
+     * 
+     * @param newToken Address of new token contract
      */
     function changeToken (
         address newToken
@@ -66,33 +89,41 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
     /**
      * changeVotingRules function
      *
-     * Make so that proposals need to be discussed for at least `minutesForDebate/60` hours,
-     * have at least `minimumQuorumForProposals` votes, and have 50% + `marginOfVotesForMajority` votes to be executed
+     * @notice Change the 'minimumQuorum' and 'durationPhaseInMinutes'
      *
-     * @param _minimumQuorum how many members must vote on a proposal for it to be executed
-     * @param _durationPhaseInMinutes the minimum amount of delay between when a proposal is made and when it can be executed
+     * @param _minimumQuorum Required percentage of the total supply, that a 
+     *  proposal may be executed at all
+     * @param _durationPhaseInMinutes The duration of the voting and 
+     *  revealing phase in minutes
      */
     function changeVotingRules(
         uint _minimumQuorum,
         uint _durationPhaseInMinutes
     ) public onlyOwner {
+        // 'minimumQuorum' has a value between 1 and 100. 
+        require(_minimumQuorum >= 1 && _minimumQuorum <= 100);
+        
         minimumQuorum = _minimumQuorum;
         durationPhaseInMinutes = _durationPhaseInMinutes;
-
-        // emit ChangeOfRules(minimumQuorum, debatingPeriodInMinutes, majorityMargin);
+        
+        // Fire event
+        emit ChangeOfRules(minimumQuorum, durationPhaseInMinutes);
     }
 
     /**
-     * nnewProposal function
+     * newProposal function
      *
-     * @notice Propose to send '__etherAmount' to 'recipient'
-     * @param _description Description of job
+     * @notice Create a new proposal
+     * 
+     * @param _description Description of the proposal
+     * @return True if successful
      */
     function newProposal(
         string _description
     )
-        onlyShareholder public returns (uint proposalID)
+    public onlyShareholder returns (uint proposalID)
     {
+        // Initialize a new proposal
         Proposal memory proposal;
         
         proposal.description = _description;
@@ -106,8 +137,8 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         proposal.numberOfVotes = 0;
         proposal.executed = false;
         proposal.proposalPassed = false;
-        proposal.result.yea = 0;
-        proposal.result.nay = 0;
+        proposal.yea = 0;
+        proposal.nay = 0;
         
         return addProposal(proposal);
     }
@@ -115,9 +146,11 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
     /**
      * vote function    
      * 
-     * @notice Sharehole can cast a vote in support of or against proposal
+     * @notice Shareholder can cast a vote in support of or against proposal
+     * 
      * @param _proposalID ID of proposal
      * @param _secret encrypted vote
+     * @return True if successful
      */
     function voteOnProposal(
         uint _proposalID,
@@ -126,10 +159,17 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         Proposal storage proposal = proposals[_proposalID];
         uint balance = token.getBalanceAt(msg.sender, proposal.weightingDate);
         
-        require(balance >= 0);
-        require(proposal.endVotingPhase > now);
+        // The voter needs to be a shareholder 
+        require(balance > 0);
+        // The proposal must be in the voting phase
+        require(now > proposal.startVotingPhase 
+            && now < proposal.endVotingPhase);
+        // Check if the voter has not already voted
         require(proposal.voted[msg.sender] != true);
+        // Check if the voter's right to vote is blocked'
+        require(isAllowedToVote(msg.sender));
         
+        // Initialize a new vote
         Vote memory vote;
         vote.proposalID = _proposalID;
         vote.voter = msg.sender;
@@ -140,11 +180,22 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         
         proposal.voted[msg.sender] = true;
         
-        return addEntry(vote);
+        addEntry(vote);
+        
+        // Fire event
+        emit Voted(_proposalID, msg.sender);
+        return true;
     }
     
     /** 
      * revealVote function
+     * 
+     * @notice Shareholder can reveal his casted vote
+     * 
+     * @param _proposalID ID of proposal
+     * @param _salt Salt value used to encrypt
+     * @param _plain Decrypted vote
+     * @return True if successful
      */
     function revealVote(
         uint _proposalID,
@@ -152,16 +203,19 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         string _plain
     ) public returns (bool){
         Proposal storage proposal = proposals[_proposalID];
-        Vote memory vote = getVote(msg.sender, _proposalID);
+        Vote memory vote = _getVote(msg.sender, _proposalID);
         
-        require(proposal.startRevealingPhase < now);
-        require(proposal.endRevealingPhase > now);
+        // The proposal must be in the revealing phase
+        require(proposal.startRevealingPhase < now 
+            && proposal.endRevealingPhase > now);
+        // Check if the hash of the entered data matches with the secret
         require(checkEncryption(msg.sender, _proposalID, _salt, _plain));
         
+        // Tally the vote
         if(compareStrings(_plain, "yea")) {
-            proposal.result.yea += vote.weight;
+            proposal.yea += vote.weight;
         } else if(compareStrings(_plain, "nay")) {
-            proposal.result.nay += vote.weight; 
+            proposal.nay += vote.weight; 
         } else {
             return false;
         }
@@ -169,55 +223,45 @@ contract VotingMechanism is Controller, ProposalStorage, VotingStorage {
         proposal.numberOfVotes += vote.weight;
         
         removeEntry(msg.sender, _proposalID);
+        // Fire event
+        emit Revealed(_proposalID, msg.sender);
         return true;
-        
     }
     
     /**
      * executeProposal function
      *
-     * Count the votes proposal #`proposalNumber` and execute it if approved
+     * @notice Execute it if approved
      *
-     * @param proposalNumber proposal number
+     * @param _proposalID ID of proposal
      */
-    function executeProposal(uint proposalNumber) public {
-        Proposal storage proposal = proposals[proposalNumber];
+    function executeProposal(
+        uint _proposalID
+    ) public {
+        Proposal storage proposal = proposals[_proposalID];
 
-        require(now > proposal.endRevealingPhase                                          
-            && !proposal.executed                                                      
-            && proposal.numberOfVotes >= minimumQuorum);                       
+        // Revealing phase must be closed
+        require(now > proposal.endRevealingPhase);   
+        // Proposal should not already be executed
+        require(!proposal.executed); 
+        // The quorum must be reached
+        require(proposal.numberOfVotes >= minimumQuorum);                       
 
-        // ...then execute result
-
-        if (proposal.result.yea > proposal.result.nay) {
-            // Proposal passed; execute the transaction
-
-            proposal.executed = true; // Avoid recursive calling
-
+        if (proposal.yea > proposal.nay) {
+            // Proposal passed
+            proposal.executed = true;
             proposal.proposalPassed = true;
         } else {
             // Proposal failed
+            proposal.executed = true;
             proposal.proposalPassed = false;
         }
 
         // Fire Events
-        //emit ProposalTallied(proposalNumber, p.tally.yea, p.tally.nay, p.numberOfVotes, p.proposalPassed);
+        emit ProposalTallied(_proposalID, proposal.proposalPassed, 
+            proposal.yea, proposal.nay);
     }
     
-    /**
-     * encrypt function
-     * 
-     * @notice function is used to get hash of two string
-     * @param _a First string
-     * @param _b Second string
-     * @return returns the the encryption as bytes32
-     */
-    function encrypt(
-        string _a, 
-        string _b
-    ) external pure returns (bytes32){
-        return keccak256(abi.encodePacked(_a, _b));
-    }    
     /// Internal functions
     
     function compareStrings (
