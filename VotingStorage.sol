@@ -101,6 +101,25 @@ contract VotingStorage {
         return ids;
     }
     
+    /**
+     * encrypt function
+     * 
+     * @notice Function is used to get hash of two string
+     * 
+     * @dev The voter can generate his secret with this function and it is used
+     *  as an internal helper to check the encryption
+     * 
+     * @param _salt First string
+     * @param _plain Second string
+     * @return hash
+     */
+    function encrypt(
+        string _salt, 
+        string _plain
+    ) public pure returns (bytes32){
+        return keccak256(abi.encodePacked(_salt, _plain));
+    } 
+    
     /// Internal functions ///
     
     /**
@@ -199,7 +218,7 @@ contract VotingStorage {
         bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
         Vote memory vote = list.listElements[id].vote;
         
-        return keccak256(abi.encodePacked(_salt, _plain)) == vote.secret;
+        return encrypt(_salt, _plain) == vote.secret;
     }
     
     /**
