@@ -1,8 +1,20 @@
 pragma solidity ^0.4.25;
 
+/**
+ * @title Controller
+ * @author Dominik Sturhan
+ * 
+ * @notice This contract allows the owner of the token and the voting contract
+ *  to controll the access
+ */
 contract Controller {
     
-    // Public variables
+    /**
+     * @notice Everyone is able to see the address of the owner
+     *  address public owner
+     * @dev The owner could be a person who carries out orders on 
+     *  behalf of the shareholders
+     */
     address public owner;
 
     /**
@@ -25,12 +37,12 @@ contract Controller {
     /**
      * transferOwnership function
      * 
-     * @notice Transfers ownership of ForestToken
-     * @param  newOwner Adress of the new owner
+     * @notice Transfers ownership of the contract
+     * @param  _newOwner Adress of the new owner
      */
     function transferOwnership(
-        address newOwner
+        address _newOwner
     ) external onlyOwner {
-        owner = newOwner;
+        owner = _newOwner;
     }
 }
