@@ -1,15 +1,18 @@
 pragma solidity ^0.4.25;
+import './Controller.sol';
 
 /**
- * @title Token History
+ * @title TokenHistory
  * @author Dominik Sturhan
  * 
- * @notice This contract records histor balances of a shareholder
+ * @notice This contract records historical balances of a shareholder
  * 
- * @dev inspired from Jordi Baylina's MiniMeToken and Validity Lab's 
- *  Token Voting System to record historical balances
+ * @dev This contract is accessible only through the Token contract. 
+ *  All functions are restricted.
  */
-contract TokenHistory {
+contract TokenHistory is Controller {
+    
+    /// Structs ///
     
     /**
      * @dev The 'Checkpoint' describes the structure in which the 'balance' 
@@ -17,29 +20,45 @@ contract TokenHistory {
      */
     struct Checkpoint {
         // `block` is the block number that the balance was generated
-        uint128 block;
+        uint block;
         
-        // `balance` is the amount of tokens at a specific block number
-        uint128 balance;
-    }   
+        // `balance` is the number of tokens at a specific block number
+        uint balance;
+    }  
+    
+    /// Variables ///
     
     // Tracks the history of the total supply of the token
     Checkpoint[] internal totalSupplyHistory;
     
-    // `balances` is the map that tracks every checkpoint of each address
+    // `balances` is the map that tracks every Checkpoint of each address
     mapping (address => Checkpoint[]) internal balances;
     
-    /// External functions ///
+    address public token;
+    
+    /// Modifiers ///
+    
+    modifier onlyToken {
+        require(msg.sender == token);
+        _;
+    }
+    
+    /// Functions ///
     
     /**
-     * getBalance function
+     * changeToken function
      * 
-     * @notice Query the current balance of the sender
+     * @notice Set or change the token
      * 
-     * @return balance The amount of token owned by the sender
+     * @dev This function has restricted access. Only the owner is allowed 
+     *  to change the token
+     * 
+     * @param _token Address of the Token contract
      */
-    function getBalance() external view returns (uint balance) {
-         return _getBalanceAt(balances[msg.sender], block.number);
+    function changeToken(
+        address _token
+    ) external onlyOwner {
+        token = _token;
     }
     
     /**
@@ -49,53 +68,68 @@ contract TokenHistory {
      * 
      * @param _address The address whose balance is queried
      * @param _block The block number when the balance is queried
-     * @return balance The amount of token owned by the '_address' at '_block'
+     * @return The number of token owned by the '_address' at '_block'
      */
     function getBalanceAt(
         address _address, 
         uint _block
-    ) external view returns (uint balance) {
+    ) external view onlyToken returns (uint) {
          return _getBalanceAt(balances[_address], _block);
     }
 
-    /**
-     * getTotalSupply function
-     * 
-     * @notice get the current total supply
-     * 
-     * @return totalSupply The total supply of the Forest Token
-     */
-    function getTotalSupply() external view returns (uint totalSupply) {
-         return _getBalanceAt(totalSupplyHistory, block.number);
-    }
-    
     /**
      * getTotalSupplyAt function
      * 
      * @notice Query the historical total supply at '_block'
      * 
      * @param _block The block number when the total supply is queried
-     * @return totalSupply The historical total supply of the Forest Token
+     * @return The historical total supply
      */
     function getTotalSupplyAt(
         uint _block
-    ) external view returns (uint totalSupply) {
+    ) external view onlyToken returns (uint) {
          return _getBalanceAt(totalSupplyHistory, _block);
     }
     
-    /// Internal functions ///
+    /**
+     * updateBalanceNow function
+     * 
+     * @notice The balance of the shareholder will be updated
+     * 
+     * @param _shareholder Address of the shareholder
+     * @param _balance The new balances
+     */
+    function updateBalanceNow(
+        address _shareholder,
+        uint _balance
+    ) external onlyToken {
+        _updateBalanceNow(balances[_shareholder], _balance);
+    }
     
-     /**
+    /**
+     * updateTotalSupplyNow function
+     * 
+     * @notice The total supply will be updated
+     * 
+     * @param _totalSupply The new total supply
+     */
+    function updateTotalSupplyNow(
+        uint _totalSupply
+    ) external onlyToken {
+        _updateBalanceNow(totalSupplyHistory, _totalSupply);
+    }
+    
+    /**
      * _getBalanceAt function
      * 
-     * @notice Obtains the amount of tokens at '_block'
+     * @notice Obtains the number of tokens at '_block'
      * 
      * @dev It is an internal function called by the external functions with 
      *  different '_checkpoints'
      * 
      * @param _checkpoints The storage of historical balances
      * @param _block The block number when the balance is queried
-     * @return The amount of tokens
+     * @return The number of tokens
      */
     function _getBalanceAt(
         Checkpoint[] storage _checkpoints, 
@@ -126,7 +160,7 @@ contract TokenHistory {
     }
 
     /**
-     * _updateBalanceAtNow function
+     * _updateBalanceNow function
      * 
      * @notice Updates the balance
      * 
@@ -136,7 +170,7 @@ contract TokenHistory {
      * @param _checkpoints The storage of historical balances
      * @param _balance The new balance which will be stored
      */
-    function _updateBalanceAtNow(
+    function _updateBalanceNow(
         Checkpoint[] storage _checkpoints, 
         uint _balance
     ) internal {
@@ -147,10 +181,10 @@ contract TokenHistory {
              _checkpoints[_checkpoints.length++];
             
             // Set the 'block' of the new checkpoint 
-            newCheckPoint.block =  uint128(block.number);
+            newCheckPoint.block =  uint256(block.number);
             
             // Set the 'balance' of the new checkpoint
-            newCheckPoint.balance = uint128(_balance);
+            newCheckPoint.balance = uint256(_balance);
         } else {
             // If there are no checkpoints or the current 'block' is 
             //  smaller than the latest entry
@@ -158,7 +192,7 @@ contract TokenHistory {
              _checkpoints[_checkpoints.length-1];
             
             // Update the old Checkpoint
-            oldCheckPoint.balance = uint128(_balance);
+            oldCheckPoint.balance = uint256(_balance);
        }
     }
 }
