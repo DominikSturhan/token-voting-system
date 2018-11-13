@@ -8,6 +8,8 @@ pragma solidity ^0.4.25;
  */
 contract ProposalStorage {
     
+    /// Structs ///
+    
     /**
      * @notice This structure defines what a proposal is. 
      * 
@@ -19,11 +21,11 @@ contract ProposalStorage {
         string description;
         
         // Dates
-        uint weightingDate;
-        uint startVotingPhase;
-        uint endVotingPhase;
-        uint startRevealingPhase;
-        uint endRevealingPhase;
+        uint recordDate;
+        uint startVoting;
+        uint endVoting;
+        uint startRevealing;
+        uint endRevealing;
         
         // Internal helper
         uint numberOfSecretVotes;
@@ -33,75 +35,79 @@ contract ProposalStorage {
         bool executed;
         bool proposalPassed;
         mapping (address => bool) voted;
-        uint yea;
-        uint nay;
+        uint yes;
+        uint no;
     }
+    
+    /// Variables ///
     
     // Internal storage for proposals
     mapping (uint => Proposal) internal proposals;
     // Counter for the ID
     uint internal currentID;
     
-    // This generates a public event on the blockchain that will notify clients
-    event ProposalAdded(uint proposalID, string description, uint weightingDate, 
-        uint endVotingPhase, uint endRevealingPhase);
+    /// Events ///
     
-    /// External functions ///
+    // This generates a public event on the blockchain that will notify clients
+    event ProposalSubmitted(uint proposalID, string description, uint recordDate, 
+        uint endVoting, uint endRevealing);
+    
+    /// Functions ///
     
     /**
-     * getProposal function
+     * queryProposal function
      * 
      * @notice Query the proposal belonging to the entered ID
      * 
      * @param _proposalID ID of the proposal
      * @return All the import information about the proposal
      */
-    function getProposal(
+    function queryProposal(
         uint _proposalID
-    ) external view returns (string Description, string Status, 
-        uint WeightingDate, bool Passed, uint YEA, uint NAY){
+    ) public view returns (string Description, string Status, 
+        uint RecordDate, bool Passed, uint Yes, uint No){
             
         Proposal memory proposal = proposals[_proposalID];
         string memory status;
         
-        if(now >= proposal.startVotingPhase 
-            && now < proposal.endVotingPhase){
+        if(now >= proposal.startVoting 
+            && now < proposal.endVoting){
              
             status = "in voting phase";
-        } else if (now >= proposal.startRevealingPhase 
-            && now < proposal.endRevealingPhase){
+        } else if (now >= proposal.startRevealing 
+            && now < proposal.endRevealing){
                 
             status = "in revealing phase";
-        } else if (now >= proposal.endRevealingPhase && !proposal.executed){
+        } else if (now >= proposal.endRevealing && !proposal.executed){
             status = "wating for execution";
         } else {
             status = "closed";
         }
         
-        return (proposal.description, status, proposal.weightingDate, 
-            proposal.proposalPassed, proposal.yea, proposal.nay);
+        return (proposal.description, status, proposal.recordDate, 
+            proposal.proposalPassed, proposal.yes, proposal.no);
     }
-    
-    /// Internal functions ///
-    
+
     /**
-     * addProposal function
+     * storeProposal function
      * 
      * @notice Internal function to add a proposal to the storage
+     * 
      * @param _proposal The proposal to be added
      * @return The ID of the added proposal
      */
-    function addProposal(
+    function storeProposal(
         Proposal _proposal
     ) internal returns (uint proposalID) {
+
         proposalID = currentID;
         proposals[proposalID] = _proposal;
         currentID++;
         
         // Fire event
-        emit ProposalAdded(proposalID, _proposal.description, 
-            _proposal.weightingDate, _proposal.endVotingPhase, 
-            _proposal.endRevealingPhase);
+        emit ProposalSubmitted(proposalID, _proposal.description, 
+            _proposal.recordDate, _proposal.endVoting, 
+            _proposal.endRevealing);
         return proposalID;
     }
 }
