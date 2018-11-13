@@ -9,6 +9,8 @@ pragma solidity ^0.4.25;
  */
 contract VotingStorage {
     
+    /// Structs ///
+    
     /**
      * @dev The 'Vote' describes the structure in which all information about 
      *  the vote will be stored
@@ -18,12 +20,12 @@ contract VotingStorage {
         address voter;
         bytes32 secret;
         uint weight;
-        uint endVotingPhase;
-        uint endRevealingPhase;
+        uint endVoting;
+        uint endRevealing;
     }
     
     /**
-     * @dev The 'ListElement' stores a 'vote'. It also knows the 'previous' and 
+     * @dev The 'ListElement' stores a 'vote'. It also knows the 'prev' and 
      *  'next' element
      */
     struct ListElement{
@@ -32,7 +34,6 @@ contract VotingStorage {
         
         Vote vote;
     }
-    
     
     /**
      * @dev The 'Vote' will be stored in a circular double linked list. Every 
@@ -45,33 +46,16 @@ contract VotingStorage {
         mapping (bytes32 => ListElement) listElements;
     }
     
+    /// Variables ///
+    
     /**
      * @dev Every voter has his own list. All of them are stored in the 
      *  map 'lists'.
      */
     mapping (address => LinkedList) internal lists;
 
-    /// External functions ///
+    /// Functions ///
 
-    /**
-     * getVote function
-     * 
-     * @notice The voter can query his casted vote for a proposal
-     * 
-     * @param _proposalID ID of the proposal
-     * @return All information about the casted vote
-     */
-    function getVote(
-        uint _proposalID
-    ) external view returns (bytes32 Secret, uint Weight, 
-        uint EndOfVotingPhase, uint EndOfRevealingPhase) {
-            
-        Vote memory vote = _getVote(msg.sender, _proposalID);
-        
-        return (vote.secret, vote.weight, vote.endVotingPhase, 
-            vote.endRevealingPhase);
-    }
-    
     /**
      * getOpenIDs function
      * 
@@ -100,125 +84,53 @@ contract VotingStorage {
         }
         return ids;
     }
-    
+
     /**
-     * encrypt function
+     * queryVote function
      * 
-     * @notice Function is used to get hash of two string
+     * @notice The voter can query his casted vote for a proposal
      * 
-     * @dev The voter can generate his secret with this function and it is used
-     *  as an internal helper to check the encryption
-     * 
-     * @param _salt First string
-     * @param _plain Second string
-     * @return hash
+     * @param _proposalID ID of the proposal
+     * @return All information about the casted vote
      */
-    function encrypt(
-        string _salt, 
-        string _plain
-    ) public pure returns (bytes32){
-        return keccak256(abi.encodePacked(_salt, _plain));
-    } 
-    
-    /// Internal functions ///
-    
-    /**
-     * addEntry function
-     * 
-     * @notice Add a new vote to end of the list
-     * 
-     * @param _vote Structure with all information about the casted vote
-     */
-    function addEntry(
-        Vote _vote
-    ) internal {
-        LinkedList storage list = lists[_vote.voter];
-        
-        bytes32 id = keccak256(abi.encodePacked(_vote.voter, _vote.proposalID));
-        
-        if(list.length == 0) {
-            list.listElements[id] = ListElement(list.head, list.head, _vote);
+    function queryVote(
+        uint _proposalID
+    ) external view returns (bytes32 Secret, uint Weight, 
+        uint EndOfVotingPhase, uint EndOfRevealingPhase) {
             
-            list.listElements[list.head].next = id;
-            list.listElements[list.head].prev = id;
-        } else {
-            list.listElements[id] = ListElement(list.tail, list.head, _vote);
-            
-            list.listElements[list.tail].next = id;
-            list.listElements[list.head].prev = id;
-        }
+        Vote memory vote = getVote(msg.sender, _proposalID);
         
-        list.tail = id;
-        list.length++;
+        return (vote.secret, vote.weight, vote.endVoting, 
+            vote.endRevealing);
     }
     
     /**
-     * removeEntry function
+     * deleteVote function
      * 
-     * @notice Remove a vote of the list
+     * @notice Delete a vote of the list after the revealing period
      * 
-     * @param _voter Address of the voter
      * @param _proposalID ID of the proposal
      */
-    function removeEntry(
-        address _voter,
+    function deleteVote(
         uint _proposalID
-    ) internal {
-        LinkedList storage list = lists[_voter];
+    ) public {
+        LinkedList storage list = lists[msg.sender];
         
-        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        bytes32 id = keccak256(abi.encodePacked(msg.sender, _proposalID));
+        
+        // Revealing period needs to be ended
+        require(list.listElements[id].vote.endRevealing < now);
+        
         bytes32 next = list.listElements[id].next;
         bytes32 prev = list.listElements[id].prev;
         
         list.listElements[prev].next = next;
         list.listElements[next].prev = prev;
         
+        if(id==list.tail) list.tail = prev;
+        
         delete list.listElements[id];
         list.length--;
-    }
-    
-    /**
-     * _getVote function
-     * 
-     * @notice Query a casted vote 
-     * 
-     * @param _voter Address of the voter
-     * @param _proposalID The ID of the proposal
-     * @return The casted vote
-     */
-    function _getVote(
-        address _voter,
-        uint _proposalID
-    ) internal view returns (Vote) {
-        LinkedList storage list = lists[_voter]; 
-        
-        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
-        return list.listElements[id].vote;
-    }
-    
-    /**
-     * checkEncryption function
-     * 
-     * @notice Check if the entered data matches the secret.
-     * 
-     * @param _voter Address of the voter
-     * @param _proposalID The ID of the proposal
-     * @param _salt Salt value to generate the hash 
-     * @param _plain The decrypted vote
-     * @return True if the hash of the entered data matches the secret
-     */
-    function checkEncryption(
-        address _voter,
-        uint _proposalID,
-        string _salt,
-        string _plain
-    ) internal view returns (bool) {
-        LinkedList storage list = lists[_voter];
-        
-        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
-        Vote memory vote = list.listElements[id].vote;
-        
-        return encrypt(_salt, _plain) == vote.secret;
     }
     
     /**
@@ -246,7 +158,7 @@ contract VotingStorage {
             bytes32 next = list.listElements[element].next;
             Vote memory vote = list.listElements[next].vote;
             
-            if (now > vote.endVotingPhase) return false;
+            if (now > vote.endVoting) return false;
             
             element = next;
             pointer++;
@@ -257,18 +169,119 @@ contract VotingStorage {
     }
     
     /**
+     * storeVote function
+     * 
+     * @notice Add a new vote to end of the list
+     * 
+     * @param _vote Structure with all information about the casted vote
+     */
+    function storeVote(
+        Vote _vote
+    ) internal {
+        LinkedList storage list = lists[_vote.voter];
+        
+        bytes32 id = keccak256(abi.encodePacked(_vote.voter, _vote.proposalID));
+        
+        if(list.length == 0) {
+            list.listElements[id] = ListElement(list.head, list.head, _vote);
+            
+            list.listElements[list.head].next = id;
+            list.listElements[list.head].prev = id;
+        } else {
+            list.listElements[id] = ListElement(list.tail, list.head, _vote);
+            
+            list.listElements[list.tail].next = id;
+            list.listElements[list.head].prev = id;
+        }
+        
+        list.tail = id;
+        list.length++;
+    }
+    
+    /**
+     * getVote function
+     * 
+     * @notice Query a casted vote 
+     * 
+     * @param _voter Address of the voter
+     * @param _proposalID The ID of the proposal
+     * @return The casted vote
+     */
+    function getVote(
+        address _voter,
+        uint _proposalID
+    ) internal view returns (Vote) {
+        LinkedList storage list = lists[_voter]; 
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        return list.listElements[id].vote;
+    }
+    
+    /**
+     * checkSecret function
+     * 
+     * @notice Check if the entered data matches the secret.
+     * 
+     * @param _voter Address of the voter
+     * @param _proposalID The ID of the proposal
+     * @param _salt Salt value to generate the hash 
+     * @param _plain The decrypted vote
+     * @return True if the hash of the entered data matches the secret
+     */
+    function checkSecret(
+        address _voter,
+        uint _proposalID,
+        string _salt,
+        string _plain
+    ) internal view returns (bool) {
+        LinkedList storage list = lists[_voter];
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        Vote memory vote = list.listElements[id].vote;
+        
+        return keccak256(abi.encodePacked(_salt, _plain)) == vote.secret;
+    }
+   
+   /**
+     * removeVote function
+     * 
+     * @notice Remove a vote of the list
+     * 
+     * @param _voter Address of the voter
+     * @param _proposalID ID of the proposal
+     */
+    function removeVote(
+        address _voter,
+        uint _proposalID
+    ) internal {
+        LinkedList storage list = lists[_voter];
+        
+        bytes32 id = keccak256(abi.encodePacked(_voter, _proposalID));
+        bytes32 next = list.listElements[id].next;
+        bytes32 prev = list.listElements[id].prev;
+        
+        list.listElements[prev].next = next;
+        list.listElements[next].prev = prev;
+        
+        if(id==list.tail) list.tail = prev;
+        
+        delete list.listElements[id];
+        list.length--;
+    }
+    
+    /**
      * appendUintToString function
      * 
      * @notice Internal helper for getOpenIDs
      * 
-     * @param _str Current string
-     * @param _space Space string
+     * @param _strA Current string
+     * @param _strB Space string
      * @param _int Uint to be appended
      * @return new string with space and uint appended
      */
     function appendUintToString(
-        string _str,
-        string _space,
+        string _strA,
+        string _strB,
         uint _int
     ) internal pure returns (string) {
         
@@ -282,27 +295,27 @@ contract VotingStorage {
         }
         
         // Transform string into bytes array
-        bytes memory str = bytes(_str);
-        bytes memory space = bytes(_space);
+        bytes memory strA = bytes(_strA);
+        bytes memory strB = bytes(_strB);
         
         // Generate new bytes array
-        bytes memory s = new bytes(str.length + space.length + actualLength);
+        bytes memory s = new bytes(strA.length + strB.length + actualLength);
         
         // Insert above arrays into new array
         // Insert current string
         uint j;
-        for (j = 0; j < str.length; j++) {
-            s[j] = str[j];
+        for (j = 0; j < strA.length; j++) {
+            s[j] = strA[j];
         }
         
         // Insert space string
-        for (j = 0; j < space.length; j++) {
-            s[str.length + j] = space[j];
+        for (j = 0; j < strB.length; j++) {
+            s[strA.length + j] = strB[j];
         }
         
         // Insert uint
         for (j = 0; j < actualLength; j++) {
-            s[str.length + space.length + j] = reversed[actualLength - 1 - j];
+            s[strA.length + strB.length + j] = reversed[actualLength - 1 - j];
         }
         
         return string(s);
